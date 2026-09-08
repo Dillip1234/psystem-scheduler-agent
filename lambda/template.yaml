@@ -1,0 +1,95 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Presigned-URL backend for the Psystem Scheduler Agent.
+  Deploys the GeneratePresignedUrl Lambda behind an HTTP API Gateway, matching the
+  contract expected by com.psystem.service.presignedurl.PresignedUrlClient.
+  The API key is generated in Secrets Manager and validated inside the Lambda itself
+  (kept simple deliberately - swap for a Lambda authorizer or Cognito/JWT if you need
+  per-customer keys, rotation policies, or want auth checked before Lambda invocation).
+
+Parameters:
+  UploadBucketName:
+    Type: String
+    Description: Existing S3 bucket the agent uploads backup files into.
+  CustomerPrefix:
+    Type: String
+    Default: customer1
+    Description: >
+      Fallback S3 key prefix used ONLY for requests from an agent build that predates
+      psystem.customer.prefix and doesn't send "customerPrefix" in the request body.
+      Every current agent sends its own prefix per-request, so this Lambda can serve
+      many customers/prefixes from a single deployment - it is not the source of truth
+      for prefix any more.
+  PresignedUrlExpiresInSeconds:
+    Type: Number
+    Default: 900
+    MinValue: 60
+    MaxValue: 3600
+
+Resources:
+
+  PresignedUrlApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: prod
+
+  ApiKeySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: psystem/presigned-url-api-key
+      GenerateSecretString:
+        PasswordLength: 32
+        ExcludePunctuation: true
+
+  GeneratePresignedUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: psystem-generate-presigned-url
+      Runtime: python3.12
+      Handler: presigned_url_lambda.lambda_handler
+      CodeUri: .
+      Timeout: 10
+      MemorySize: 256
+      Environment:
+        Variables:
+          UPLOAD_BUCKET: !Ref UploadBucketName
+          CUSTOMER_PREFIX: !Ref CustomerPrefix
+          PRESIGNED_URL_EXPIRES_IN: !Ref PresignedUrlExpiresInSeconds
+          API_KEY_SECRET_ARN: !Ref ApiKeySecret
+      Policies:
+        - Statement:
+            # Broadened from a single "${CustomerPrefix}/*" to the whole bucket because the
+            # prefix is now chosen per-request by whichever agent is calling (potentially
+            # many customers behind one Lambda) - it can no longer be pinned to one prefix
+            # at deploy time. The Lambda itself still validates customerPrefix against
+            # SAFE_TOKEN (alphanumeric/._- only) before it ever reaches this key, so path
+            # traversal or writing outside the bucket is not possible.
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource: !Sub "arn:aws:s3:::${UploadBucketName}/*"
+        - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref ApiKeySecret
+      Events:
+        PresignedUrl:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PresignedUrlApi
+            Path: /upload/presigned-url
+            Method: POST
+
+Outputs:
+  PresignedUrlEndpoint:
+    Description: Full URL to configure as psystem.upload.presigned-url-api in the Java agent
+    Value: !Sub "https://${PresignedUrlApi}.execute-api.${AWS::Region}.amazonaws.com/prod/upload/presigned-url"
+
+  ApiKeySecretArn:
+    Description: >
+      Secrets Manager ARN holding the API key. Retrieve the actual value with:
+      aws secretsmanager get-secret-value --secret-id psystem/presigned-url-api-key --query SecretString --output text
+      then set it as PSYSTEM_API_KEY on the Java agent.
+    Value: !Ref ApiKeySecret

@@ -1,0 +1,29 @@
+# Example customer-specific override file.
+# Deploy alongside the JAR and run with:
+#   java -jar psystem-scheduler-agent.jar --spring.config.additional-location=file:./application-customer-example.yml
+#
+# Nothing customer-specific is baked into the JAR itself - this file (or the equivalent
+# environment variables documented in README.md) is the only thing that changes per customer.
+
+psystem:
+  scheduler:
+    cron: "0 5 13 * * ?"       # every day at 13:05
+    enabled: true
+
+  machine:
+    id-strategy: GENERATED_PERSISTED
+    location: "Kolkata-DC1"
+
+  customer:
+    prefix: "customer1"   # <-- the only thing that changes per customer to control their S3 folder
+
+  file:
+    source-directory: "C:/CustomerBackups/Nightly"
+
+  upload:
+    presigned-url-api: "https://api.customer-backend.example.com/v1/upload/presigned-url"
+    api-key: "${PSYSTEM_API_KEY}"   # supply via environment variable, never commit a real key
+
+  aws:
+    region: "ap-south-1"
+    bucket: "customer1-backup-bucket"

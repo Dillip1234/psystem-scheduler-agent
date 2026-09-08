@@ -1,0 +1,70 @@
+spring:
+  application:
+    name: psystem-scheduler-agent
+
+server:
+  port: ${PSYSTEM_ADMIN_PORT:7777}
+  address: 127.0.0.1   # bind to localhost only - see README "Deployment" for exposing beyond localhost
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+psystem:
+  scheduler:
+    cron: "${PSYSTEM_CRON:0 25 15 * * ?
+}"
+    enabled: ${PSYSTEM_SCHEDULER_ENABLED:true}
+    prevent-overlap: true
+
+  machine:
+    id-strategy: ${PSYSTEM_MACHINE_ID_STRATEGY:GENERATED_PERSISTED}
+    id: ${PSYSTEM_MACHINE_ID:}
+    id-file-path: ${PSYSTEM_MACHINE_ID_FILE:./.psystem/machine-id}
+    location: ${PSYSTEM_LOCATION:Jajpur_Road}
+
+  customer:
+    # Top-level S3 key prefix for this deployment, sent to the backend on every
+    # pre-signed URL request (see com.psystem.service.presignedurl.PresignedUrlClient).
+    # This is the only thing that needs to change per customer to control where their
+    # uploads land in S3 - the backend no longer decides this.
+    prefix: ${PSYSTEM_CUSTOMER_PREFIX:GUPTAMEDICAL}
+
+  file:
+    source-directory: ${PSYSTEM_SOURCE_DIR:D:\CSGST\G0126}
+    allowed-extensions:
+      - ".zip"
+      - ".rar"
+    stability-check-interval-seconds: ${PSYSTEM_STABILITY_INTERVAL_SECONDS:5}
+    stability-check-attempts: ${PSYSTEM_STABILITY_ATTEMPTS:3}
+
+  upload:
+    presigned-url-api: ${PSYSTEM_PRESIGNED_URL_API:https://cwyyzlzuo8.execute-api.ap-southeast-1.amazonaws.com/dev/presigned-url}
+    api-key: ${PSYSTEM_API_KEY:}
+    connection-timeout-ms: ${PSYSTEM_CONNECT_TIMEOUT_MS:30000}
+    read-timeout-ms: ${PSYSTEM_READ_TIMEOUT_MS:300000}
+    max-retries: ${PSYSTEM_MAX_RETRIES:3}
+    initial-backoff-ms: ${PSYSTEM_INITIAL_BACKOFF_MS:10000}
+    backoff-multiplier: ${PSYSTEM_BACKOFF_MULTIPLIER:2.0}
+    upload-buffer-size-bytes: ${PSYSTEM_UPLOAD_BUFFER_BYTES:1048576000}
+    delete-after-upload: ${PSYSTEM_DELETE_AFTER_UPLOAD:false}
+
+  aws:
+    region: ${PSYSTEM_AWS_REGION:ap-southeast-1}
+    bucket: ${PSYSTEM_AWS_BUCKET:my-backup-bucket}
+
+  ledger:
+    # Single JSON file holding the full upload-history/idempotency ledger. No database,
+    # no JDBC connection - see com.psystem.repository.UploadLedgerStore. Lives entirely on
+    # the customer machine, alongside the machine-id file.
+    file-path: ${PSYSTEM_LEDGER_FILE:./.psystem/ledger.json}
+
+logging:
+  level:
+    root: INFO
+    com.psystem: INFO
