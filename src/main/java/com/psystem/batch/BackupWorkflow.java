@@ -10,6 +10,7 @@ import com.psystem.service.file.FileScannerService;
 import com.psystem.service.file.FileStabilityService;
 import com.psystem.service.idempotency.IdempotencyService;
 import com.psystem.service.metadata.MachineMetadataService;
+import com.psystem.service.notification.NotificationService;
 import com.psystem.service.presignedurl.PresignedUrlClient;
 import com.psystem.service.upload.S3UploadService;
 import lombok.RequiredArgsConstructor;
@@ -57,6 +58,7 @@ public class BackupWorkflow {
     private final PresignedUrlClient presignedUrlClient;
     private final S3UploadService s3UploadService;
     private final IdempotencyService idempotencyService;
+    private final NotificationService notificationService;
 
     public WorkflowResult run(String executionId) {
         log.info("Scheduler started. executionId={}", executionId);
@@ -81,6 +83,7 @@ public class BackupWorkflow {
         if (idempotencyService.isAlreadyUploaded(fingerprint)) {
             log.info("File already uploaded successfully in a previous execution - skipping. " +
                     "executionId={} fingerprint={}", executionId, fingerprint);
+            notificationService.notifyDuplicateSkipped(executionId, file, fingerprint);
             return WorkflowResult.skipped(file);
         }
 
@@ -100,6 +103,7 @@ public class BackupWorkflow {
             idempotencyService.markSuccess(record, presignedUrl.getObjectKey());
             log.info("Scheduler completed successfully. executionId={} objectKey={}",
                     executionId, presignedUrl.getObjectKey());
+            notificationService.notifyUploadSuccess(executionId, file, presignedUrl.getObjectKey());
 
             return WorkflowResult.success(file, presignedUrl.getObjectKey());
 

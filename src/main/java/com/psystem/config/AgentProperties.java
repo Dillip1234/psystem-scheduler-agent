@@ -1,6 +1,7 @@
 package com.psystem.config;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -10,6 +11,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.NestedConfigurationProperty;
 import org.springframework.validation.annotation.Validated;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -50,6 +52,10 @@ public class AgentProperties {
     @Valid
     @NestedConfigurationProperty
     private Ledger ledger = new Ledger();
+
+    @Valid
+    @NestedConfigurationProperty
+    private Notification notification = new Notification();
 
     @Data
     public static class Scheduler {
@@ -166,6 +172,36 @@ public class AgentProperties {
          */
         @NotBlank
         private String filePath = "./.psystem/ledger.json";
+    }
+
+    @Data
+    public static class Notification {
+        /** Master on/off switch for all agent emails (success, duplicate-skip, and failure). */
+        private boolean enabled = true;
+
+        /**
+         * "From" address used on outgoing alert emails. When left blank, falls back to
+         * {@code spring.mail.username} (the authenticated Gmail account) at send time.
+         */
+        private String from;
+
+        /**
+         * One or more recipient addresses to notify. Configured as a plain YAML list so any
+         * number of addresses can be added without a code change.
+         */
+        private List<@NotBlank @Email String> to = new ArrayList<>();
+
+        /** Subject-line prefix, useful for filtering/routing alerts client-side. */
+        private String subjectPrefix = "[Psystem Agent]";
+
+        /** Send an email when a file uploads successfully. */
+        private boolean notifyOnSuccess = true;
+
+        /** Send an email when a run is skipped because the file was already uploaded previously. */
+        private boolean notifyOnDuplicateSkipped = true;
+
+        /** Send an email when a scheduled execution fails. */
+        private boolean notifyOnFailure = true;
     }
 
     public enum MachineIdStrategy {

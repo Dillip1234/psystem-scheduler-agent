@@ -4,6 +4,7 @@ import com.psystem.batch.BackupWorkflow;
 import com.psystem.config.AgentProperties;
 import com.psystem.exception.DirectoryUnavailableException;
 import com.psystem.exception.NoCandidateFileException;
+import com.psystem.service.notification.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -26,6 +27,7 @@ public class BackupScheduler {
     private final BackupWorkflow backupWorkflow;
     private final SchedulerLockService lockService;
     private final AgentProperties properties;
+    private final NotificationService notificationService;
 
     @Scheduled(cron = "${psystem.scheduler.cron}")
     public void triggerScheduledExecution() {
@@ -49,11 +51,14 @@ public class BackupScheduler {
             backupWorkflow.run(executionId);
         } catch (NoCandidateFileException e) {
             // Not an error: expected outcome when the directory has nothing new to upload.
+            // No failure email is sent for this case - it is a normal no-op, not a failure.
             log.info("Execution {} completed with no action: {}", executionId, e.getMessage());
         } catch (DirectoryUnavailableException e) {
             log.error("Execution {} FAILED - source directory unavailable: {}", executionId, e.getMessage());
+            notificationService.notifyUploadFailure(executionId, "Directory scan", e);
         } catch (Exception e) {
             log.error("Execution {} FAILED with an unexpected error: {}", executionId, e.getMessage(), e);
+            notificationService.notifyUploadFailure(executionId, "Upload workflow", e);
         } finally {
             if (properties.getScheduler().isPreventOverlap()) {
                 lockService.release();
