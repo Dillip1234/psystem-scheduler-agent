@@ -12,7 +12,10 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -23,6 +26,10 @@ import java.util.Optional;
  * largest one. Only regular, readable files with an allowed extension (case-insensitive)
  * are considered; everything else - subdirectories, symlinked directories, unsupported
  * extensions, unreadable files - is silently skipped (and logged at DEBUG).
+ * <p>
+ * When {@code psystem.file.today-only} is true (the default), a file is also required to have
+ * been <b>created today</b> (agent machine's local date), so the "largest file" is always the
+ * largest of today's files, never an older, bigger leftover.
  */
 @Slf4j
 @Service
@@ -40,26 +47,34 @@ public class FileScannerService {
         Path dir = validateAndResolveDirectory();
         List<CandidateFile> candidates = new ArrayList<>();
 
+        // Resolve "today" once per scan so every file is compared against the same date,
+        // even if the scan happens to straddle midnight.
+        ZoneId zone = ZoneId.systemDefault();
+        LocalDate today = properties.getFile().isTodayOnly() ? LocalDate.now(zone) : null;
+
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir)) {
             for (Path entry : stream) {
-                toCandidate(entry).ifPresent(candidates::add);
+                toCandidate(entry, today, zone).ifPresent(candidates::add);
             }
         } catch (IOException e) {
             throw new DirectoryUnavailableException(
                     "Unable to list contents of source directory: " + dir, e);
         }
 
-        log.info("Directory scan complete. path={} eligibleFilesFound={}", dir, candidates.size());
+        log.info("Directory scan complete. path={} todayOnly={} date={} eligibleFilesFound={}",
+                dir, today != null, today, candidates.size());
         return candidates;
     }
 
     /**
-     * Scans and returns the largest eligible file, if any exist.
+     * Scans and returns the largest eligible file, if any exist. If two files have exactly the
+     * same size, the more recently created one wins so the choice is deterministic.
      */
     public Optional<CandidateFile> findLargest() {
         List<CandidateFile> candidates = scan();
         return candidates.stream()
-                .max(Comparator.comparingLong(CandidateFile::getSizeBytes));
+                .max(Comparator.comparingLong(CandidateFile::getSizeBytes)
+                        .thenComparing(CandidateFile::getCreatedAt));
     }
 
     private Path validateAndResolveDirectory() {
@@ -82,13 +97,12 @@ public class FileScannerService {
         return dir;
     }
 
-    private Optional<CandidateFile> toCandidate(Path entry) {
+    private Optional<CandidateFile> toCandidate(Path entry, LocalDate today, ZoneId zone) {
         try {
-            if (!Files.isRegularFile(entry)) {
-                return Optional.empty();
-            }
-            if (!Files.isReadable(entry)) {
-                log.warn("Skipping unreadable file: {}", entry.getFileName());
+            // One attribute read gives type, size, creation and modified time together,
+            // so all values are a consistent snapshot of the same moment.
+            BasicFileAttributes attrs = Files.readAttributes(entry, BasicFileAttributes.class);
+            if (!attrs.isRegularFile()) {
                 return Optional.empty();
             }
 
@@ -98,14 +112,26 @@ public class FileScannerService {
                 return Optional.empty();
             }
 
-            long size = Files.size(entry);
-            Instant lastModified = Files.getLastModifiedTime(entry).toInstant();
+            Instant createdAt = attrs.creationTime().toInstant();
+            if (today != null) {
+                LocalDate createdDate = createdAt.atZone(zone).toLocalDate();
+                if (!createdDate.equals(today)) {
+                    log.debug("Skipping {} - created {} (not today {})", fileName, createdDate, today);
+                    return Optional.empty();
+                }
+            }
+
+            if (!Files.isReadable(entry)) {
+                log.warn("Skipping unreadable file: {}", fileName);
+                return Optional.empty();
+            }
 
             return Optional.of(CandidateFile.builder()
                     .path(entry)
                     .fileName(fileName)
-                    .sizeBytes(size)
-                    .lastModified(lastModified)
+                    .sizeBytes(attrs.size())
+                    .lastModified(attrs.lastModifiedTime().toInstant())
+                    .createdAt(createdAt)
                     .fileType(CandidateFile.FileType.fromExtension(matchedExtension))
                     .build());
 

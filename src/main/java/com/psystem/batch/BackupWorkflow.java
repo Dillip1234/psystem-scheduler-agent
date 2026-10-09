@@ -63,11 +63,13 @@ public class BackupWorkflow {
     public WorkflowResult run(String executionId) {
         log.info("Scheduler started. executionId={}", executionId);
 
-        // Step 1 + 2: Scan directory and find the largest ZIP/RAR file.
+        // Step 1 + 2: Scan directory and find the largest ZIP/RAR file created today.
         Optional<CandidateFile> selected = fileScannerService.findLargest();
         if (selected.isEmpty()) {
-            log.info("No ZIP/RAR files found. executionId={} - completing as no-op.", executionId);
-            throw new NoCandidateFileException("No eligible ZIP/RAR files in source directory");
+            log.info("No eligible ZIP/RAR file (created today) found. executionId={} - " +
+                    "sending file-not-found notification and completing as no-op.", executionId);
+            notificationService.notifyFileNotFound(executionId);
+            throw new NoCandidateFileException("No eligible ZIP/RAR file in source directory");
         }
         CandidateFile file = selected.get();
         log.info("Selected file. executionId={} name={} sizeBytes={}",

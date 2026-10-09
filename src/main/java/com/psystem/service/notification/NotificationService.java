@@ -10,6 +10,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
@@ -51,8 +52,7 @@ public class NotificationService {
                         "Execution ID:    %s%n" +
                         "File name:       %s%n" +
                         "File size:       %d bytes%n" +
-                        "Machine/location:%s%n" +
-                        "S3 object key:   %s%n",
+                        "Machine/location:%s%n",
                 TIMESTAMP_FORMAT.format(Instant.now()),
                 executionId,
                 file.getFileName(),
@@ -91,6 +91,47 @@ public class NotificationService {
         );
 
         send(config, subject, body, executionId, "duplicate-skip");
+    }
+
+    /**
+     * Notifies all configured recipients that no file was available to upload - i.e. the source
+     * directory had no eligible ZIP/RAR file (created today, when {@code today-only} is on).
+     */
+    public void notifyFileNotFound(String executionId) {
+        AgentProperties.Notification config = properties.getNotification();
+        if (!config.isNotifyOnFileNotFound()) {
+            log.debug("File-not-found email notification is disabled " +
+                    "(psystem.notification.notify-on-file-not-found=false) - skipping email for executionId={}",
+                    executionId);
+            return;
+        }
+
+        AgentProperties.FileConfig fileConfig = properties.getFile();
+        String criteria = fileConfig.isTodayOnly()
+                ? "created today (" + LocalDate.now() + ")"
+                : "any creation date";
+
+        String subject = String.format("Backup file NOT FOUND - %s (execution %s)",
+                properties.getMachine().getLocation(), executionId);
+        String body = String.format(
+                "No file was available to upload, so nothing was uploaded in this run.%n%n" +
+                        "Time:             %s%n" +
+                        "Execution ID:     %s%n" +
+                        "Machine/location: %s%n" +
+                        "Source directory: %s%n" +
+                        "File types:       %s%n" +
+                        "Looked for files: %s%n%n" +
+                        "Please check that the backup was created on the source machine today.%n" +
+                        "This is an automated alert.%n",
+                TIMESTAMP_FORMAT.format(Instant.now()),
+                executionId,
+                properties.getMachine().getLocation(),
+                fileConfig.getSourceDirectory(),
+                String.join(", ", fileConfig.getAllowedExtensions()),
+                criteria
+        );
+
+        send(config, subject, body, executionId, "file-not-found");
     }
 
     /**

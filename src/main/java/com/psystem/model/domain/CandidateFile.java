@@ -18,6 +18,8 @@ public class CandidateFile {
     String fileName;
     long sizeBytes;
     Instant lastModified;
+    /** File system creation time (on Linux/some file systems this may fall back to last-modified). */
+    Instant createdAt;
     FileType fileType;
 
     public enum FileType {

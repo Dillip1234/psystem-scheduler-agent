@@ -19,7 +19,7 @@ spring:
         writetimeout: 10000
 
 server:
-  port: ${PSYSTEM_ADMIN_PORT:9000}
+  port: ${PSYSTEM_ADMIN_PORT:9011}
   address: 127.0.0.1   # bind to localhost only - see README "Deployment" for exposing beyond localhost
 
 management:
@@ -33,8 +33,7 @@ management:
 
 psystem:
   scheduler:
-    cron: "${PSYSTEM_CRON:0 15 18 * * ?
-}"
+    cron: "${PSYSTEM_CRON:0 30 12 * * ?}"
     enabled: ${PSYSTEM_SCHEDULER_ENABLED:true}
     prevent-overlap: true
 
@@ -42,20 +41,22 @@ psystem:
     id-strategy: ${PSYSTEM_MACHINE_ID_STRATEGY:GENERATED_PERSISTED}
     id: ${PSYSTEM_MACHINE_ID:}
     id-file-path: ${PSYSTEM_MACHINE_ID_FILE:./.psystem/machine-id}
-    location: ${PSYSTEM_LOCATION:Balasore}
+    location: ${PSYSTEM_LOCATION:Jajpur}
 
   customer:
     # Top-level S3 key prefix for this deployment, sent to the backend on every
     # pre-signed URL request (see com.psystem.service.presignedurl.PresignedUrlClient).
     # This is the only thing that needs to change per customer to control where their
     # uploads land in S3 - the backend no longer decides this.
-    prefix: ${PSYSTEM_CUSTOMER_PREFIX:Marutidistributor}
+    prefix: ${PSYSTEM_CUSTOMER_PREFIX:Haragouripharma}
 
   file:
-    source-directory: ${PSYSTEM_SOURCE_DIR:D:\USGST\M0126}
+    source-directory: ${PSYSTEM_SOURCE_DIR:D:/Backup}
     allowed-extensions:
       - ".zip"
       - ".rar"
+    # true = only files CREATED TODAY are eligible; the largest of those is uploaded.
+    today-only: ${PSYSTEM_TODAY_ONLY:true}
     stability-check-interval-seconds: ${PSYSTEM_STABILITY_INTERVAL_SECONDS:5}
     stability-check-attempts: ${PSYSTEM_STABILITY_ATTEMPTS:3}
 
@@ -84,10 +85,12 @@ psystem:
     notify-on-success: ${PSYSTEM_NOTIFY_ON_SUCCESS:true}
     notify-on-duplicate-skipped: ${PSYSTEM_NOTIFY_ON_DUPLICATE_SKIPPED:true}
     notify-on-failure: ${PSYSTEM_NOTIFY_ON_FAILURE:true}
+    # Email when no file created today exists in the source directory.
+    notify-on-file-not-found: ${PSYSTEM_NOTIFY_ON_FILE_NOT_FOUND:true}
     # One or more recipient addresses to notify.
     # Add as many entries as needed - a plain YAML list, no code change required.
     to:
-      - ${PSYSTEM_NOTIFICATION_TO_1:pradhanajoykumar3@gmail.com}
+      - ${PSYSTEM_NOTIFICATION_TO_1:pharma.haragouri99@gmail.com}
       - ${PSYSTEM_NOTIFICATION_TO_2:biranchi.lookmydata@gmail.com}
 
   ledger:

@@ -51,7 +51,8 @@ public class BackupScheduler {
             backupWorkflow.run(executionId);
         } catch (NoCandidateFileException e) {
             // Not an error: expected outcome when the directory has nothing new to upload.
-            // No failure email is sent for this case - it is a normal no-op, not a failure.
+            // The "file not found" email has already been sent by BackupWorkflow; no failure
+            // email is sent here because this is a normal no-op, not a failure.
             log.info("Execution {} completed with no action: {}", executionId, e.getMessage());
         } catch (DirectoryUnavailableException e) {
             log.error("Execution {} FAILED - source directory unavailable: {}", executionId, e.getMessage());

@@ -114,6 +114,13 @@ public class AgentProperties {
         @NotEmpty
         private List<String> allowedExtensions = List.of(".zip", ".rar");
 
+        /**
+         * When true (default), only files whose creation date is today (agent machine's local
+         * date) are eligible; the largest of those is uploaded. When false, every eligible
+         * file in the directory is considered regardless of its creation date.
+         */
+        private boolean todayOnly = true;
+
         /** Number of seconds to wait between size checks when verifying a file is no longer being written. */
         @Min(0)
         private int stabilityCheckIntervalSeconds = 5;
@@ -202,6 +209,9 @@ public class AgentProperties {
 
         /** Send an email when a scheduled execution fails. */
         private boolean notifyOnFailure = true;
+
+        /** Send an email when no eligible file (created today) exists in the source directory. */
+        private boolean notifyOnFileNotFound = true;
     }
 
     public enum MachineIdStrategy {
